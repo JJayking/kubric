@@ -75,16 +75,16 @@ for set_index in range(num_sets):
     #     scale=8.0 # 使用均匀的缩放比例
     # )
     #
-    # # 设置旋转和位置
+  
     #
-    # ramp.position = (0, 0, 1)  # 设置圆锥体的位置
+    # ramp.position = (0, 0, 1)  
     # ramp.static = True
     # scene += ramp
     #
     # ramp_blender = ramp.linked_objects[renderer]
-    # # 设置物体的旋转，确保绕X轴旋转30度
+   
     # ramp_blender.rotation_mode = 'XYZ'  # 确保使用正确的旋转模式
-    # ramp_blender.rotation_euler = (np.radians(120), 0, 0)  # 绕x轴旋转30度
+    # ramp_blender.rotation_euler = (np.radians(120), 0, 0)  
     #
     # # 应用变换以确保旋转在Blender中生效
     # bpy.context.view_layer.objects.active = ramp_blender
@@ -99,20 +99,20 @@ for set_index in range(num_sets):
 
     # 设置旋转和位置
 
-    plane.position = (-2, 0, -1.5)  # 设置圆锥体的位置
+    plane.position = (-2, 0, -1.5)  
     plane.static = True
     scene += plane
     plane.background = True
     plane_blender = plane.linked_objects[renderer]
-    # 设置物体的旋转，确保绕X轴旋转30度
+   
     plane_blender.rotation_mode = 'XYZ'  # 确保使用正确的旋转模式
-    plane_blender.rotation_euler = (np.radians(120), 0, 0)  # 绕x轴旋转30度
+    plane_blender.rotation_euler = (np.radians(120), 0, 0) 
 
     # 应用变换以确保旋转在Blender中生效
     bpy.context.view_layer.objects.active = plane_blender
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
     # Create obj
-    # 添加的代码
+
     def generate_object_properties(existing_objects, rng):
         while True:
             shape_name = rng.choice(CLEVR_OBJECTS)
@@ -310,7 +310,7 @@ for set_index in range(num_sets):
 # if not os.path.exists(frames_dir):
 #     raise FileNotFoundError(f"Frames directory '{frames_dir}' not found")
 #
-# # 查找帧图像文件，假设它们是按顺序命名的，比如 frame0001.png, frame0002.png, ...
+# # 查找帧图像文件
 # frame_files = sorted([f for f in os.listdir(frames_dir) if f.endswith(".png")])
 # if not frame_files:
 #     raise FileNotFoundError("No frame images found in the specified directory")
