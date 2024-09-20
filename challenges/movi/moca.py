@@ -140,13 +140,13 @@ for set_index in range(num_sets):
     num_objects = rng.randint(FLAGS.min_num_objects, FLAGS.max_num_objects + 1)
     logging.info("Randomly placing %d objects:", num_objects)
     generated_objects = []
-    def is_overlapping(obj, existing_objects, padding=0.5):
-        """检查 obj 是否与 existing_objects 中的任意物体重叠，padding 用于确保有一定的安全距离"""
-        for existing_obj in existing_objects:
-            distance = np.linalg.norm(np.array(obj.position) - np.array(existing_obj.position))
-            if distance < (obj.scale + existing_obj.scale) / 2 + padding:
-                return True
-        return False
+    # def is_overlapping(obj, existing_objects, padding=0.5):
+    #     """检查 obj 是否与 existing_objects 中的任意物体重叠，padding 用于确保有一定的安全距离"""
+    #     for existing_obj in existing_objects:
+    #         distance = np.linalg.norm(np.array(obj.position) - np.array(existing_obj.position))
+    #         if distance < (obj.scale + existing_obj.scale) / 2 + padding:
+    #             return True
+    #     return False
     for i in range(num_objects):
         properties = generate_object_properties(existing_objects, rng)
 
@@ -159,20 +159,20 @@ for set_index in range(num_sets):
 
         assert isinstance(obj, kb.FileBasedObject)
 
-        # 尝试生成不重叠的位置
-        positioned = False
-        attempts = 0
-        max_attempts = 10  # 限制尝试次数以避免无限循环
+        # # 尝试生成不重叠的位置
+        # positioned = False
+        # attempts = 0
+        # max_attempts = 10  # 限制尝试次数以避免无限循环
 
-        while not positioned and attempts < max_attempts:
+        # while not positioned and attempts < max_attempts:
             obj.position = rng.uniform(SPAWN_REGION[0], SPAWN_REGION[1])
-            if not is_overlapping(obj, generated_objects):  # 检查是否重叠
-                positioned = True
-            attempts += 1
+        #     if not is_overlapping(obj, generated_objects):  # 检查是否重叠
+        #         positioned = True
+        #     attempts += 1
 
-        if not positioned:
-            logging.warning(f"Could not find a non-overlapping position for {obj.name} after {max_attempts} attempts.")
-            continue  # 跳过当前物体，如果没有找到合适的位置
+        # if not positioned:
+        #     logging.warning(f"Could not find a non-overlapping position for {obj.name} after {max_attempts} attempts.")
+        #     continue  # 跳过当前物体，如果没有找到合适的位置
 
         # 设置物体的材料和物理属性
         # ...
