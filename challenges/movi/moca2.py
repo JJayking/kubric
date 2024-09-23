@@ -57,37 +57,34 @@ def compute_electromagnetic_force(obj1, obj2):
     r_vec = np.array(obj1.position) - np.array(obj2.position)
     r = np.linalg.norm(r_vec)
     if r == 0:
-        return np.zeros(3)  # 避免除以零
+        return np.zeros(3) 
 
     # 计算库仑力
     force_magnitude = COULOMB_CONSTANT * obj1.charge * obj2.charge / r ** 2
 
-    # 方向是从 obj1 指向 obj2
+    
     force_direction = r_vec / r
 
-    # 返回电磁力
+    
     return force_magnitude * force_direction
 def set_object_orientation_parallel_to_ground(obj):
     """将物体的旋转角度设置为平行于地面（即绕 X 和 Y 轴的旋转角度为零）"""
-    obj.rotation = (0, 0, np.random.uniform(0, 2*np.pi))  # Z 轴可以随机旋转，但 X 和 Y 保持为 0
+    obj.rotation = (0, 0, np.random.uniform(0, 2*np.pi))  
 
 
 
 def compute_object_height(obj):
-    """根据物体的形状和 scale 计算物体的高度."""
     if obj.asset_id == "sphere":
-        return obj.scale[0]  # 球体的 scale[0] 是半径，物体高度是直径
+        return obj.scale[0]  
     elif obj.asset_id == "cube":
-        return obj.scale[0]  # 立方体的 scale[0] 是边长，高度就是 scale[0]
+        return obj.scale[0]  
     elif obj.asset_id == "cylinder":
-        return obj.scale[2]  # 圆柱体的 scale[2] 是高度
-    # 其他物体类型，可以继续添加逻辑处理
+        return obj.scale[2]  
     else:
-        return obj.scale[2]  # 默认返回 z 轴的 scale 作为高度
+        return obj.scale[2]  
 def set_object_on_ground(obj):
     """确保物体贴着地面生成."""
     object_height = compute_object_height(obj)
-    # 将物体的位置 z 轴设置为负的 (height / 2) ，这样物体底部贴着地面
     obj.position = (obj.position[0], obj.position[1], object_height / 2)
 
 # Lights
@@ -143,7 +140,6 @@ dome_blender = dome.linked_objects[renderer]
 #
 
 # Create obj
-# 添加的代码
 def generate_object_properties(existing_objects, rng):
     while True:
         shape_name = rng.choice(CLEVR_OBJECTS)
