@@ -13,14 +13,14 @@ SPAWN_REGION = [(-5, -7, 0), (5.6, 7.2, 6)]
 SPAWN_REGIONx = [-5,5]
 SPAWN_REGIONy = [-7,7]
 VELOCITY_RANGE = [(-2., -2., 0), (2., 2., 0)]
-CLEVR_OBJECTS = ("cube", "cylinder", "sphere")
+CLEVR_OBJECTS = ("cube", "cylinder", "sphere","cone")
 KUBASIC_OBJECTS = ("cube", "cylinder", "sphere", "cone", "torus", "gear",
                    "torus_knot", "sponge", "spot", "teapot", "suzanne")
 # --- CLI arguments
 parser = kb.ArgumentParser()
 parser.add_argument("--backgrounds_split", choices=["train", "test"],
                     default="train")
-parser.add_argument("--min_num_objects", type=int, default=3,
+parser.add_argument("--min_num_objects", type=int, default=6,
                     help="minimum number of objects")
 parser.add_argument("--max_num_objects", type=int, default=8,
                     help="maximum number of objects")
@@ -49,7 +49,7 @@ kubasic = kb.AssetSource.from_manifest(FLAGS.kubasic_assets)
 gso = kb.AssetSource.from_manifest(FLAGS.gso_assets)
 hdri_source = kb.AssetSource.from_manifest(FLAGS.hdri_assets)
 scene.gravity = (0, 0, -9.81)  # 设置重力方向向下
-COULOMB_CONSTANT = 4.99e8  # 库仑常数
+COULOMB_CONSTANT = 8.99e9  # 库仑常数
 
 
 def compute_electromagnetic_force(obj1, obj2):
@@ -57,34 +57,37 @@ def compute_electromagnetic_force(obj1, obj2):
     r_vec = np.array(obj1.position) - np.array(obj2.position)
     r = np.linalg.norm(r_vec)
     if r == 0:
-        return np.zeros(3) 
+        return np.zeros(3)  # 避免除以零
 
     # 计算库仑力
     force_magnitude = COULOMB_CONSTANT * obj1.charge * obj2.charge / r ** 2
 
-    
+    # 方向是从 obj1 指向 obj2
     force_direction = r_vec / r
 
-    
+    # 返回电磁力
     return force_magnitude * force_direction
 def set_object_orientation_parallel_to_ground(obj):
     """将物体的旋转角度设置为平行于地面（即绕 X 和 Y 轴的旋转角度为零）"""
-    obj.rotation = (0, 0, np.random.uniform(0, 2*np.pi))  
+    obj.rotation = (0, 0, np.random.uniform(0, 2*np.pi))  # Z 轴可以随机旋转，但 X 和 Y 保持为 0
 
 
 
 def compute_object_height(obj):
+    """根据物体的形状和 scale 计算物体的高度."""
     if obj.asset_id == "sphere":
-        return obj.scale[0]  
+        return obj.scale[0]  # 球体的 scale[0] 是半径，物体高度是直径
     elif obj.asset_id == "cube":
-        return obj.scale[0]  
+        return obj.scale[0]  # 立方体的 scale[0] 是边长，高度就是 scale[0]
     elif obj.asset_id == "cylinder":
-        return obj.scale[2]  
+        return obj.scale[2]  # 圆柱体的 scale[2] 是高度
+    # 其他物体类型，可以继续添加逻辑处理
     else:
-        return obj.scale[2]  
+        return obj.scale[2]  # 默认返回 z 轴的 scale 作为高度
 def set_object_on_ground(obj):
     """确保物体贴着地面生成."""
     object_height = compute_object_height(obj)
+    # 将物体的位置 z 轴设置为负的 (height / 2) ，这样物体底部贴着地面
     obj.position = (obj.position[0], obj.position[1], object_height / 2)
 
 # Lights
@@ -140,12 +143,13 @@ dome_blender = dome.linked_objects[renderer]
 #
 
 # Create obj
+# 添加的代码
 def generate_object_properties(existing_objects, rng):
     while True:
         shape_name = rng.choice(CLEVR_OBJECTS)
         size_label, size = kb.randomness.sample_sizes("clevr", rng)
         color_label, random_color = kb.randomness.sample_color("clevr", rng)
-        material_name = rng.choice(["metal", "rubber"])
+        material_name = rng.choice(["metal", "rubber", "plastic"])
 
         # 生成新的物体属性
         new_properties = {
@@ -189,7 +193,7 @@ for i in range(num_objects):
         scale=properties["size"],
         name=f"{properties['size_label']} {properties['color_label']} {properties['material_name']} {properties['shape_name']}"
     )
-    obj.charge = rng.choice([-1, 1])  *9e-5   # 随机分配电荷
+
 
     assert isinstance(obj, kb.FileBasedObject)
     # 尝试生成不重叠的位置
@@ -216,18 +220,31 @@ for i in range(num_objects):
         obj.material = kb.PrincipledBSDFMaterial(color=properties["random_color"], metallic=1.0,
                                                  roughness=0.2, ior=2.5)
         obj.friction = 0.4
-        # obj.friction = 0
         obj.restitution = 0.3
         obj.mass *= 2.7 * properties["size"] ** 3
-    else:  # material_name == "rubber"
-        obj.material = kb.PrincipledBSDFMaterial(color=properties["random_color"], metallic=0.,
+        obj.charge = rng.choice([-7,-9,-11,7,9,11]) * 1.6e-7  # 随机分配电荷
+    elif properties["material_name"] == "rubber":
+        obj.material = kb.PrincipledBSDFMaterial(color=properties["random_color"], metallic=0.4,
                                                  ior=1.25, roughness=0.7,
                                                  specular=0.33)
-        # obj.friction = 0
         obj.friction = 0.8
         obj.restitution = 0.7
         obj.mass *= 1.1 * properties["size"] ** 3
-
+        obj.charge = rng.choice([-1,-3, 1,3]) * 9e-7  # 随机分配电荷
+    elif properties["material_name"] == "plastic":
+        obj.material = kb.PrincipledBSDFMaterial(color=properties["random_color"], metallic=0.6,
+                                                 roughness=0.6, specular=0.5)
+        obj.friction = 0.5
+        obj.restitution = 0.4
+        obj.mass *= 0.9 * properties["size"] ** 3
+        obj.charge = rng.choice([-1,-3, 1,3]) * 9e-7  # 随机分配电荷
+    # elif properties["material_name"] == "wood":
+    #     obj.material = kb.PrincipledBSDFMaterial(color=properties["random_color"], metallic=0.5,
+    #                                              roughness=0.8, specular=0.2)
+    #     obj.friction = 0.6
+    #     obj.restitution = 0.5
+    #     obj.mass *= 0.7 * properties["size"] ** 3
+    #     obj.charge =0
     obj.metadata = {
         "shape": properties["shape_name"].lower(),
         "size": properties["size"],
@@ -252,8 +269,8 @@ for i in range(num_objects):
 
     obj_blender.rotation_mode = 'XYZ'  # 确保使用正确的旋转模式
     obj_blender.rotation_euler = (0, 0, 0)
-    bpy.context.view_layer.objects.active = obj_blender
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=False)
+    # bpy.context.view_layer.objects.active = obj_blender
+    # bpy.ops.object.transform_apply(location=True, rotation=True, scale=False)
 #摩擦系数
 dome.friction = FLAGS.floor_friction  # 设置摩擦系数
 dome.restitution = FLAGS.floor_restitution  # 设置恢复系数
@@ -267,10 +284,23 @@ full_path = os.path.join(output_dir, output_file)
 logging.info("Setting up the Camera...")
 scene.camera = kb.PerspectiveCamera(focal_length=35., sensor_width=32)
 if FLAGS.camera == "fixed_random":
-    scene.camera.position = kb.sample_point_in_half_sphere_shell(inner_radius=7., outer_radius=9., offset=0.1)
+    # scene.camera.position = kb.sample_point_in_half_sphere_shell(inner_radius=7., outer_radius=9., offset=0.1)
+    # scene.camera.look_at((0, 0, 0))
+    # scene.camera.sensor_width = 64  # 增加传感器宽度
+    # scene.camera.focal_length = 20  # 减小焦距以增加视野范围
+    # 设置相机位置，放置在较高的地方以俯视角度查看整个区域
+    camera_height = 30.0  # 适当的高度，使得相机能够覆盖整个区域
+    scene.camera.position = (0, 0, camera_height)
+
+    # 设置相机目标为中心点（即坐标原点）
     scene.camera.look_at((0, 0, 0))
+
+    # 调整相机的传感器宽度和焦距以确保覆盖整个区域
     scene.camera.sensor_width = 64  # 增加传感器宽度
     scene.camera.focal_length = 20  # 减小焦距以增加视野范围
+
+    # 你可以根据需要调整 focal_length 和 sensor_width，以获得最佳视角
+
 elif FLAGS.camera == "linear_movement":
     camera_start, camera_end = get_linear_camera_motion_start_end(movement_speed=rng.uniform(low=0., high=FLAGS.max_camera_movement))
     for frame in range(FLAGS.frame_end + 2):
@@ -321,7 +351,7 @@ with open(full_path, 'w') as file:
         mass = obj.mass
         friction = obj.friction
         restitution = obj.restitution
-        file.write(f"Object {obj.name} - Mass={mass}, Friction={friction}, Restitution={restitution}\n")
+        file.write(f"Object {obj.name} - Mass={mass}, Friction={friction}, Restitution={restitution},Charge={obj.charge}\n")
 
 # --- Rendering
 if FLAGS.save_state:
