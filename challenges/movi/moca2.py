@@ -5,31 +5,35 @@ from kubric.renderer import Blender
 import numpy as np
 import bpy
 import os
-import random
-import bmesh
-from scipy.spatial.transform import Rotation as R
+import subprocess
+import pdb
+
 # --- Some configuration values
-SPAWN_REGION = [(-5, -7, 0), (5.6, 7.2, 6)]
-SPAWN_REGIONx = [-5,5]
-SPAWN_REGIONy = [-7,7]
-VELOCITY_RANGE = [(-2., -2., 0), (2., 2., 0)]
-CLEVR_OBJECTS = ("cube", "cylinder", "sphere","cone")
+# 物体初始位置范围（x,y,z)
+SPAWN_REGION = [(-7, -7, 5), (7, 7, 5)]
+# 物体初始速度范围（x,y,z)
+VELOCITY_RANGE = [(0., 0., -1), (0., 0., -1)]
+COULOMB_CONSTANT = 8.987551e9  # 库仑常数
+# omit sphere here, for sphere does not have 3D rotation
+CLEVR_OBJECTS = ("cube", "cylinder")
 KUBASIC_OBJECTS = ("cube", "cylinder", "sphere", "cone", "torus", "gear",
                    "torus_knot", "sponge", "spot", "teapot", "suzanne")
 # --- CLI arguments
 parser = kb.ArgumentParser()
 parser.add_argument("--backgrounds_split", choices=["train", "test"],
                     default="train")
-parser.add_argument("--min_num_objects", type=int, default=6,
+parser.add_argument("--min_num_objects", type=int, default=1,
                     help="minimum number of objects")
-parser.add_argument("--max_num_objects", type=int, default=8,
+parser.add_argument("--max_num_objects", type=int, default=3,
                     help="maximum number of objects")
+parser.add_argument("--set_index", type=int,
+                    default=1)
 parser.add_argument("--floor_friction", type=float, default=0.3)
 parser.add_argument("--floor_restitution", type=float, default=0.5)
 parser.add_argument("--camera", choices=["fixed_random", "linear_movement"], default="fixed_random")
 parser.add_argument("--max_camera_movement", type=float, default=4.0)
-parser.add_argument("--save_state", dest="save_state", action="store_true")
-parser.set_defaults(save_state=True, frame_end=60, frame_rate=30, resolution=256)
+parser.add_argument("--save_state", dest="save_state", action="store_false")
+parser.set_defaults(save_state=True, frame_end=1, frame_rate=30, resolution=240)
 # Configuration for the source of the assets
 parser.add_argument("--kubasic_assets", type=str,
                     default="gs://kubric-public/assets/KuBasic/KuBasic.json")
@@ -39,6 +43,32 @@ parser.add_argument("--gso_assets", type=str,
                     default="gs://kubric-public/assets/GSO/GSO.json")
 
 FLAGS = parser.parse_args()
+num_sets = 100  # 要生成的视频组数
+
+def compute_masks(segmentation, asset_list):
+    for k, asset in enumerate(asset_list, start=1):
+        asset.metadata["masks"] = []
+        asset.metadata["mask_frames"] = []
+        for t in range(segmentation.shape[0]):
+            seg = segmentation[t, ..., 0]
+            mask = np.zeros_like(seg, dtype=np.uint8)
+            mask[seg == k] = 1  # 将分割图中属于当前物体的像素值设置为1
+            asset.metadata["masks"].append(mask)
+            asset.metadata["mask_frames"].append(t)
+
+def compute_electromagnetic_force(obj1, obj2):
+    # 获取物体之间的距离
+    r_vec = np.array(obj1.position) - np.array(obj2.position)
+    r = np.linalg.norm(r_vec)
+    if r == 0:
+        return np.zeros(3)
+
+        # 计算库仑力
+    force_magnitude = COULOMB_CONSTANT * obj1.charge * obj2.charge / r ** 2
+
+    force_direction = r_vec / r
+
+    return force_magnitude * force_direction
 
 
 # --- Common setups & resources
@@ -49,56 +79,17 @@ kubasic = kb.AssetSource.from_manifest(FLAGS.kubasic_assets)
 gso = kb.AssetSource.from_manifest(FLAGS.gso_assets)
 hdri_source = kb.AssetSource.from_manifest(FLAGS.hdri_assets)
 scene.gravity = (0, 0, -9.81)  # 设置重力方向向下
-COULOMB_CONSTANT = 8.99e9  # 库仑常数
-
-
-def compute_electromagnetic_force(obj1, obj2):
-    # 获取物体之间的距离
-    r_vec = np.array(obj1.position) - np.array(obj2.position)
-    r = np.linalg.norm(r_vec)
-    if r == 0:
-        return np.zeros(3)  # 避免除以零
-
-    # 计算库仑力
-    force_magnitude = COULOMB_CONSTANT * obj1.charge * obj2.charge / r ** 2
-
-    # 方向是从 obj1 指向 obj2
-    force_direction = r_vec / r
-
-    # 返回电磁力
-    return force_magnitude * force_direction
-def set_object_orientation_parallel_to_ground(obj):
-    """将物体的旋转角度设置为平行于地面（即绕 X 和 Y 轴的旋转角度为零）"""
-    obj.rotation = (0, 0, np.random.uniform(0, 2*np.pi))  # Z 轴可以随机旋转，但 X 和 Y 保持为 0
-
-
-
-def compute_object_height(obj):
-    """根据物体的形状和 scale 计算物体的高度."""
-    if obj.asset_id == "sphere":
-        return obj.scale[0]  # 球体的 scale[0] 是半径，物体高度是直径
-    elif obj.asset_id == "cube":
-        return obj.scale[0]  # 立方体的 scale[0] 是边长，高度就是 scale[0]
-    elif obj.asset_id == "cylinder":
-        return obj.scale[2]  # 圆柱体的 scale[2] 是高度
-    # 其他物体类型，可以继续添加逻辑处理
-    else:
-        return obj.scale[2]  # 默认返回 z 轴的 scale 作为高度
-def set_object_on_ground(obj):
-    """确保物体贴着地面生成."""
-    object_height = compute_object_height(obj)
-    # 将物体的位置 z 轴设置为负的 (height / 2) ，这样物体底部贴着地面
-    obj.position = (obj.position[0], obj.position[1], object_height / 2)
-
+output_subdir = os.path.join(output_dir, 'scene2', f'obj_{FLAGS.set_index}')
+if not os.path.exists(output_subdir):
+    os.makedirs(output_subdir)
 # Lights
 logging.info("Adding four (studio) lights to the scene similar to CLEVR...")
 scene.add(kb.assets.utils.get_clevr_lights(rng=rng))
 scene.ambient_illumination = kb.Color(0.05, 0.05, 0.05)
-
 # Dome
 floor_material = kb.PrincipledBSDFMaterial(roughness=1., specular=0.)
 
-dome = kubasic.create(asset_id="dome", name="dome",material=floor_material,
+dome = kubasic.create(asset_id="dome", name="dome", material=floor_material,
                       friction=FLAGS.floor_friction,
                       restitution=FLAGS.floor_restitution,
                       static=True, background=True)
@@ -107,49 +98,14 @@ scene.metadata["background"] = "clevr"
 assert isinstance(dome, kb.FileBasedObject)
 scene += dome
 dome_blender = dome.linked_objects[renderer]
-#
-# # 将对象添加到场景中
-# cube1 = kubasic.create(
-#     asset_id="cube",
-#     name="cube",
-#     scale=5.0 # 使用均匀的缩放比例,
-#
-# )
-#
-# # 设置旋转和位置
-# cube1.friction = FLAGS.floor_friction
-# cube1.restitution = FLAGS.floor_restitution
-# cube1.material=floor_material
-# floor_material.color = kb.Color.from_name("gray")
-# cube1.mass = 1000.0  # 设置质量
-# cube1.position = (-2, 0, -1.5)
-#
-# cube1.static = True  # 设置为静态物体
-# scene += cube1
-# cube1.background=True
-# cube1_blender = cube1.linked_objects[renderer]
-#
-#
-# cube1_blender.rotation_mode = 'XYZ'  # 确保使用正确的旋转模式
-# cube1_blender.rotation_euler = (np.radians(120), 0, 0)
-#
-#
-# # 应用变换以确保旋转在Blender中生效
-# # 应用变换以确保旋转在Blender中生效
-# bpy.context.view_layer.objects.active = cube1_blender
-# bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
 
 
-#
-
-# Create obj
-# 添加的代码
 def generate_object_properties(existing_objects, rng):
     while True:
         shape_name = rng.choice(CLEVR_OBJECTS)
         size_label, size = kb.randomness.sample_sizes("clevr", rng)
         color_label, random_color = kb.randomness.sample_color("clevr", rng)
-        material_name = rng.choice(["metal", "rubber", "plastic"])
+        material_name = rng.choice(["metal", "rubber"])
 
         # 生成新的物体属性
         new_properties = {
@@ -166,85 +122,89 @@ def generate_object_properties(existing_objects, rng):
                    existing_objects):
             return new_properties
 
-def is_overlapping(obj, existing_objects, padding=0.5):
-    """检查 obj 是否与 existing_objects 中的任意物体重叠，padding 用于确保有一定的安全距离"""
-    for existing_obj in existing_objects:
-        # 如果 scale 是数组，取其平均值
-        obj_scale = np.mean(obj.scale) if isinstance(obj.scale, (list, tuple, np.ndarray)) else obj.scale
-        existing_obj_scale = np.mean(existing_obj.scale) if isinstance(existing_obj.scale, (list, tuple, np.ndarray)) else existing_obj.scale
-
-        # 计算两物体的距离
-        distance = np.linalg.norm(np.array(obj.position) - np.array(existing_obj.position))
-        if distance < (obj_scale + existing_obj_scale) / 2 + padding:
-            return True
-    return False
-
 
 existing_objects = []  # 存储已生成物体的属性
 # Add random objects
 num_objects = rng.randint(FLAGS.min_num_objects, FLAGS.max_num_objects + 1)
 logging.info("Randomly placing %d objects:", num_objects)
 generated_objects = []
+
+
+def set_object_upright(obj, renderer):
+    obj_blender = obj.linked_objects[renderer]  # 获取 Blender 对象
+    obj_blender.rotation_mode = 'XYZ'  # 设置旋转模式为欧拉角
+    obj_blender.rotation_euler = (0, 0, 0)  # 设置旋转角度为零
+    bpy.context.view_layer.objects.active = obj_blender  # 设置为活动对象
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)  # 应用旋转
+
+
+def is_overlapping(obj, existing_objects, padding=1):
+    """检查 obj 是否与 existing_objects 中的任意物体重叠，padding 用于确保有一定的安全距离"""
+    for existing_obj in existing_objects:
+        distance = np.linalg.norm(np.array(obj.position) - np.array(existing_obj.position))
+        # pdb.set_trace()
+        if distance < (obj.scale.any() + existing_obj.scale.any()) / 2 + padding:
+            return True  # 重叠
+
+    return False
+
+
 for i in range(num_objects):
     properties = generate_object_properties(existing_objects, rng)
 
     obj = kubasic.create(
         asset_id=properties["shape_name"],
         scale=properties["size"],
-        name=f"{properties['size_label']} {properties['color_label']} {properties['material_name']} {properties['shape_name']}"
+        name=f"{properties['size_label']} {properties['color_label']} {properties['material_name']} {properties['shape_name']}",
+
     )
-
-
+    obj.charge = rng.choice([-1, 1]) * 9e-5  # 随机分配电荷
     assert isinstance(obj, kb.FileBasedObject)
+
     # 尝试生成不重叠的位置
     positioned = False
     attempts = 0
-    max_attempts =  1000  # 限制尝试次数以避免无限循环
+    max_attempts = 20  # 限制尝试次数以避免无限循环
 
     while not positioned and attempts < max_attempts:
-        # obj.position = rng.uniform(SPAWN_REGION[0], SPAWN_REGION[1])
-        object_height = compute_object_height(obj)
-        obj.position = (random.uniform(-5, 5), random.uniform(-5, 5), object_height / 2)
-        if not is_overlapping(obj, generated_objects):  # 检查是否重叠
-            # set_object_on_ground(obj)  # 调整物体位置确保贴着地面生成
-            set_object_orientation_parallel_to_ground(obj)  # 确保物体平行于地面
+        obj_size = properties["size"]
+        # pdb.set_trace()
+        position = rng.uniform(SPAWN_REGION[0], SPAWN_REGION[1])
+        position[2] += obj_size / 2  # 将物体放置在地面上
+        obj.position = position
 
+        if not is_overlapping(obj, generated_objects):  # 检查是否重叠
             positioned = True
+
         attempts += 1
 
     if not positioned:
         logging.warning(f"Could not find a non-overlapping position for {obj.name} after {max_attempts} attempts.")
         continue  # 跳过当前物体，如果没有找到合适的位置
 
+    # 设置物体的材料和物理属性
+    # ...
     if properties["material_name"] == "metal":
         obj.material = kb.PrincipledBSDFMaterial(color=properties["random_color"], metallic=1.0,
                                                  roughness=0.2, ior=2.5)
-        obj.friction = 0.4
+        obj.friction = 0.5
         obj.restitution = 0.3
-        obj.mass *= 2.7 * properties["size"] ** 3
-        obj.charge = rng.choice([-7,-9,-11,7,9,11]) * 1.6e-7  # 随机分配电荷
-    elif properties["material_name"] == "rubber":
-        obj.material = kb.PrincipledBSDFMaterial(color=properties["random_color"], metallic=0.4,
+        obj.mass = rng.randint(3, 4) * properties["size"] ** 3
+        # 质量保留两位小数
+        obj.mass = round(obj.mass, 2)
+        obj.charge = rng.choice([-7, -9, -11, 7, 9, 11]) * 1e-6  # 随机分配电荷
+    else:  # material_name == "rubber"
+        obj.material = kb.PrincipledBSDFMaterial(color=properties["random_color"], metallic=0.,
                                                  ior=1.25, roughness=0.7,
                                                  specular=0.33)
-        obj.friction = 0.8
+        # obj.friction = 0
+        obj.friction = 0.9
         obj.restitution = 0.7
-        obj.mass *= 1.1 * properties["size"] ** 3
-        obj.charge = rng.choice([-1,-3, 1,3]) * 9e-7  # 随机分配电荷
-    elif properties["material_name"] == "plastic":
-        obj.material = kb.PrincipledBSDFMaterial(color=properties["random_color"], metallic=0.6,
-                                                 roughness=0.6, specular=0.5)
-        obj.friction = 0.5
-        obj.restitution = 0.4
-        obj.mass *= 0.9 * properties["size"] ** 3
-        obj.charge = rng.choice([-1,-3, 1,3]) * 9e-7  # 随机分配电荷
-    # elif properties["material_name"] == "wood":
-    #     obj.material = kb.PrincipledBSDFMaterial(color=properties["random_color"], metallic=0.5,
-    #                                              roughness=0.8, specular=0.2)
-    #     obj.friction = 0.6
-    #     obj.restitution = 0.5
-    #     obj.mass *= 0.7 * properties["size"] ** 3
-    #     obj.charge =0
+        obj.mass *= rng.randint(1, 3) * properties["size"] ** 3
+        # 质量保留两位小数
+        obj.mass = round(obj.mass, 2)
+        obj.charge = rng.choice([-7, -9, -11, 7, 9, 11]) * 1e-6  # 随机分配电荷
+
     obj.metadata = {
         "shape": properties["shape_name"].lower(),
         "size": properties["size"],
@@ -253,62 +213,55 @@ for i in range(num_objects):
         "color": properties["random_color"].rgb,
         "color_label": properties["color_label"],
     }
-
-    scene += obj
+    scene.add(obj)
     kb.move_until_no_overlap(obj, simulator, spawn_region=SPAWN_REGION, rng=rng)
-    # 调整生成物体的速度范围和质量
 
     # initialize velocity randomly but biased towards center
     obj.velocity = (rng.uniform(*VELOCITY_RANGE) - [obj.position[0], obj.position[1], 0])
-    print(f"Setting position for {obj.name}: {obj.position}, Height: {obj.scale},{object_height}")
-
+    # 设置物体的初始朝向
+    # set_object_upright(obj, renderer)
     logging.info("    Added %s at %s", obj.asset_id, obj.position)
     existing_objects.append(properties)  # 存储已生成物体的属性
     generated_objects.append(obj)  # 添加物体到列表
-    obj_blender = obj.linked_objects[renderer]
 
-    obj_blender.rotation_mode = 'XYZ'  # 确保使用正确的旋转模式
-    obj_blender.rotation_euler = (0, 0, 0)
-    # bpy.context.view_layer.objects.active = obj_blender
-    # bpy.ops.object.transform_apply(location=True, rotation=True, scale=False)
-#摩擦系数
+# 摩擦系数
 dome.friction = FLAGS.floor_friction  # 设置摩擦系数
 dome.restitution = FLAGS.floor_restitution  # 设置恢复系数
 
-#物体位置
+# 物体位置
 positions = []  # 用于存储每一帧的位置
 orientation = []  # 用于存储每一帧的位置
 output_file = 'object_positions.txt'
-full_path = os.path.join(output_dir, output_file)
+full_path = os.path.join(output_subdir, output_file)
 # --- Camera setup
 logging.info("Setting up the Camera...")
 scene.camera = kb.PerspectiveCamera(focal_length=35., sensor_width=32)
 if FLAGS.camera == "fixed_random":
+    center_x = (SPAWN_REGION[0][0] + SPAWN_REGION[1][0]) / 2
+    center_y = (SPAWN_REGION[0][1] + SPAWN_REGION[1][1]) / 2
+    center_z = (SPAWN_REGION[0][2] + SPAWN_REGION[1][2]) / 2
+
+    edge_x = SPAWN_REGION[1][0]
+    edge_y = SPAWN_REGION[1][1]
+    edge_z = SPAWN_REGION[1][2] + 5  # 将相机位置设置在物体上方
+
+    scene.camera.position = (edge_x, edge_y, edge_z)
+
+    # 将视线方向向下调整45度
+    scene.camera.look_at((center_x, center_y, center_z))
+
     # scene.camera.position = kb.sample_point_in_half_sphere_shell(inner_radius=7., outer_radius=9., offset=0.1)
     # scene.camera.look_at((0, 0, 0))
-    # scene.camera.sensor_width = 64  # 增加传感器宽度
-    # scene.camera.focal_length = 20  # 减小焦距以增加视野范围
-    # 设置相机位置，放置在较高的地方以俯视角度查看整个区域
-    camera_height = 30.0  # 适当的高度，使得相机能够覆盖整个区域
-    scene.camera.position = (0, 0, camera_height)
-
-    # 设置相机目标为中心点（即坐标原点）
-    scene.camera.look_at((0, 0, 0))
-
-    # 调整相机的传感器宽度和焦距以确保覆盖整个区域
-    scene.camera.sensor_width = 64  # 增加传感器宽度
-    scene.camera.focal_length = 20  # 减小焦距以增加视野范围
-
-    # 你可以根据需要调整 focal_length 和 sensor_width，以获得最佳视角
-
+    scene.camera.sensor_width = 40  # 增加传感器宽度
+    scene.camera.focal_length = 40  # 减小焦距以增加视野范围
 elif FLAGS.camera == "linear_movement":
-    camera_start, camera_end = get_linear_camera_motion_start_end(movement_speed=rng.uniform(low=0., high=FLAGS.max_camera_movement))
+    camera_start, camera_end = get_linear_camera_motion_start_end(
+        movement_speed=rng.uniform(low=0., high=FLAGS.max_camera_movement))
     for frame in range(FLAGS.frame_end + 2):
         interp = (frame - 1) / (FLAGS.frame_end + 1)
         scene.camera.position = (interp * np.array(camera_start) + (1 - interp) * np.array(camera_end))
         scene.camera.look_at((0, 0, 0))
         scene.camera.keyframe_insert("position", frame)
-
 
 # --- Run simulation
 logging.info("Running the simulation ...")
@@ -316,10 +269,9 @@ animation = {}
 collisions = []
 print()
 with open(full_path, 'w') as file:
-
     for frame_index in range(FLAGS.frame_end):
 
-        animation, collisions = simulator.run(frame_start=frame_index, frame_end=frame_index+1)
+        animation, collisions = simulator.run(frame_start=frame_index, frame_end=frame_index + 1)
         for i, obj1 in enumerate(generated_objects):
             total_force = np.zeros(3)
             for j, obj2 in enumerate(generated_objects):
@@ -345,43 +297,54 @@ with open(full_path, 'w') as file:
                 animation.setdefault(obj.name, []).append((positions, orientation))
 
                 # 将信息写入文件
-                file.write(f"Frame {frame_index}: Object {obj.name} - Position={positions}, Orientation={orientation}\n")
+                file.write(
+                    f"Frame {frame_index}: Object {obj.name} - Position={positions}, Orientation={orientation}\n")
     for obj in generated_objects:
         kb.move_until_no_overlap(obj, simulator, spawn_region=SPAWN_REGION, rng=rng)
         mass = obj.mass
         friction = obj.friction
         restitution = obj.restitution
-        file.write(f"Object {obj.name} - Mass={mass}, Friction={friction}, Restitution={restitution},Charge={obj.charge}\n")
+        file.write(f"Object {obj.name} - Mass={mass}, Friction={friction}, "
+                   f"Restitution={restitution}, Charge={obj.charge}\n")
 
 # --- Rendering
 if FLAGS.save_state:
-    logging.info("Saving the renderer state to '%s'", output_dir / "scene.blend")
-    renderer.save_state(output_dir / "scene.blend")
+    logging.info(f"Saving the renderer state to '{output_subdir}/scene_{FLAGS.set_index}.blend'")
+    blend_file_path = os.path.join(output_subdir, f"scene_{FLAGS.set_index}.blend")
+    renderer.save_state(blend_file_path)
 
-logging.info("Rendering the scene ...")
-data_stack = renderer.render()
-
+logging.info("Rendering the scene...")
+data_stack = renderer.render(return_layers=["rgba", "segmentation"])
+# pdb.set_trace()
 # --- Postprocessing
 kb.compute_visibility(data_stack["segmentation"], scene.assets)
 visible_foreground_assets = [asset for asset in scene.foreground_assets if np.max(asset.metadata["visibility"]) > 0]
-visible_foreground_assets = sorted(visible_foreground_assets, key=lambda asset: np.sum(asset.metadata["visibility"]), reverse=True)
+visible_foreground_assets = sorted(visible_foreground_assets,
+                                   key=lambda asset: np.sum(asset.metadata["visibility"]), reverse=True)
 
-data_stack["segmentation"] = kb.adjust_segmentation_idxs(data_stack["segmentation"], scene.assets, visible_foreground_assets)
+data_stack["segmentation"] = kb.adjust_segmentation_idxs(data_stack["segmentation"], scene.assets,
+                                                         visible_foreground_assets)
 scene.metadata["num_instances"] = len(visible_foreground_assets)
 
-kb.write_image_dict(data_stack, output_dir)
+kb.write_image_dict(data_stack, output_subdir)
 kb.post_processing.compute_bboxes(data_stack["segmentation"], visible_foreground_assets)
+# 生成物体masks
+compute_masks(data_stack["segmentation"], visible_foreground_assets)
 
 # --- Metadata
 logging.info("Collecting and storing metadata for each object.")
-kb.write_json(filename=output_dir / "metadata.json", data={
+metadata_file_path = os.path.join(output_subdir, "metadata.json")
+events_file_path = os.path.join(output_subdir, "events.json")
+kb.write_json(filename=metadata_file_path, data={
     "flags": vars(FLAGS),
     "metadata": kb.get_scene_metadata(scene),
     "camera": kb.get_camera_info(scene.camera),
     "instances": kb.get_instance_info(scene, visible_foreground_assets),
 })
-kb.write_json(filename=output_dir / "events.json", data={
+kb.write_json(filename=events_file_path, data={
     "collisions": kb.process_collisions(collisions, scene, assets_subset=visible_foreground_assets),
 })
 
 kb.done()
+
+
