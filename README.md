@@ -6,7 +6,7 @@
     <img alt="arXiv" src="https://img.shields.io/badge/arXiv-2512.15153-red?logo=arxiv" height="20" />
 </a>
 <a href="https://github.com/MICLAB-BUPT/EFA" target="_blank">
-    <img alt="Website" src="https://img.shields.io/badge/🌎_Website-EFA-blue.svg" height="20" />
+    <img alt="GitHub" src="https://img.shields.io/badge/github-%23121011.svg?style=flat&logo=github&logoColor=white" height="20" />
 </a>
 <a href="https://www.kaggle.com/datasets/dd34dc6f49a960a31e03af896f85be526a72f8c9a684defd715c75d62bedbdc2" target="_blank">
     <img alt="HF Dataset: CoT-AFA" src="https://img.shields.io/badge/%F0%9F%A4%97%20_Dataset-CoT--AFA-ffc107?color=ffc107&logoColor=white" height="20" />
