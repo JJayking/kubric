@@ -9,7 +9,7 @@
     <img alt="GitHub" src="https://img.shields.io/badge/github-%23121011.svg?style=flat&logo=github&logoColor=white" height="20" />
 </a>
 <a href="https://www.kaggle.com/datasets/dd34dc6f49a960a31e03af896f85be526a72f8c9a684defd715c75d62bedbdc2" target="_blank">
-    <img alt="HF Dataset: CoT-AFA" src="https://img.shields.io/badge/%F0%9F%A4%97%20_Dataset-CoT--AFA-ffc107?color=ffc107&logoColor=white" height="20" />
+    <img alt="Kaggle Dataset: CoT-AFA" src="https://img.shields.io/badge/Kaggle-CoT--AFA-20BEFF?logo=kaggle&logoColor=white" height="20" />
 </a>
 <div>
     Mengshi Qi<sup></sup>, </span>
