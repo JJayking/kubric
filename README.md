@@ -1,6 +1,6 @@
 <div align="center" style="font-family: charter;">
 <h1><i>Explainable Action Form Assessment</i>:</br> by Exploiting Multimodal Chain-of-Thoughts Reasoning</h1>
-<img src="docs/resources/preview.png" width="50%"/>
+
 <br />
 <a href="https://arxiv.org/abs/2512.15153" target="_blank">
     <img alt="arXiv" src="https://img.shields.io/badge/arXiv-2512.15153-red?logo=arxiv" height="20" />
