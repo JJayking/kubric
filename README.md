@@ -28,15 +28,6 @@
 ## Release
 - `2025-12-25` :rocket: Released the CoT-AFA dataset and EFA source code on GitHub.
 - `2025-12-20` :hearts: Our paper is available on arXiv!
-- `[PLACEHOLDER_FOR_FUTURE_UPDATES]` : Add future news here.
-
-## Contents
-- [Release](#release)
-- [Contents](#contents)
-- [CoT-AFA](#cot-afa)
-- [Results](#results)
-- [Citation](#citation)
-
 ## CoT-AFA
 **Overview:** We introduce CoT-AFA, a diverse dataset for the Human Action Form Assessment (AFA) task. It includes 3,392 videos (364,812 frames) of fitness and martial arts actions, with annotations for action categories, standardization (standard/non-standard), multiple viewpoints, and Chain-of-Thought text explanations. The dataset supports tasks like action classification, quality assessment, and explainable feedback generation.
 <img src="docs/resources/benchmark-stats.png" width="100%"/> <!-- Assume this combines Fig.2 and Fig.3 from page3 -->
@@ -45,7 +36,7 @@ CoT-AFA features a three-level lexicon (workout mode, type, category) and multi-
 
 | Dataset | Workout modes | Workout types | Action categories | Standard Videos | Non-standard Videos | Total Videos | Total Frames | CoT Text Explanations |
 |---------|---------------|---------------|-------------------|-----------------|---------------------|--------------|--------------|-----------------------|
-| CoT-AFA | 2             | 28            | 141               | 2,242           | 1,150               | 3,392        | 364,812      | 3,392                 |
+| CoT-AFA |       2       |      28       |        141        |      2,242      |        1,150        |    3,392     |    364,812   |         3,392         |
 
 ## Results
 Our Explainable Fitness Assessor (EFA) framework achieves significant improvements:
