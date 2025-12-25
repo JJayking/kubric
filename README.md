@@ -8,20 +8,20 @@
 <a href="https://github.com/MICLAB-BUPT/EFA" target="_blank">
     <img alt="Website" src="https://img.shields.io/badge/🌎_Website-EFA-blue.svg" height="20" />
 </a>
-<a href="[PLACEHOLDER_FOR_HF_DATASET_LINK]" target="_blank">
+<a href="https://www.kaggle.com/datasets/dd34dc6f49a960a31e03af896f85be526a72f8c9a684defd715c75d62bedbdc2" target="_blank">
     <img alt="HF Dataset: CoT-AFA" src="https://img.shields.io/badge/%F0%9F%A4%97%20_Dataset-CoT--AFA-ffc107?color=ffc107&logoColor=white" height="20" />
 </a>
 <div>
-    Mengshi Qi<sup>1*</sup>, </span>
-    Yeteng Wu<sup>1</sup>, </span>
-    Wulian Yun<sup>1</sup>, </span>
-    Xianlin Zhang<sup>1*</sup>, </span>
-    Huadong Ma<sup>1</sup> </span>
+    Mengshi Qi<sup></sup>, </span>
+    Yeteng Wu<sup></sup>, </span>
+    Wulian Yun<sup></sup>, </span>
+    Xianlin Zhang<sup></sup>, </span>
+    Huadong Ma<sup></sup> </span>
 </div>
 <div>
     <sup>1</sup>State Key Laboratory of Networking and Switching Technology, Beijing University of Posts and Telecommunications, China </span>
 </div>
-<img src="docs/resources/teaser.png" width="100%"/> <!-- Assume this is Fig.1 from page1 -->
+ <!-- Assume this is Fig.1 from page1 -->
 <p align="justify"><i>In real-world scenarios like fitness training and martial arts, evaluating if human actions conform to standard forms is essential for safety and effectiveness. Traditional video understanding focuses on what and where actions occur, but our work introduces the Action Form Assessment (AFA) task to assess how well actions are performed against objective standards. We present the CoT-AFA dataset, featuring diverse workout videos with Chain-of-Thought explanations that provide step-by-step reasoning, error analysis, and corrective solutions, enabling explainable feedback for skill improvement.</i></p>
 </div>
 
